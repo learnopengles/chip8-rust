@@ -1,3 +1,7 @@
+extern crate byteorder;
+
+use byteorder::{BigEndian, ByteOrder};
+
 struct Memory {
 	ram: [u8; 2048],
 }
@@ -126,6 +130,11 @@ impl Memory {
 	fn load_rom_into_memory(&mut self, rom: &[u8; 1536]) {
 		self.ram[0x200..].copy_from_slice(rom);		
 	}
+
+	#[inline]
+	fn read_unsigned_short(&self, position: u16) -> u16 {
+		BigEndian::read_u16(&self.ram[position as usize..])		
+	}
 }
 
 struct Registers {
@@ -192,8 +201,11 @@ impl Chip8 {
 	pub fn load_rom(&mut self, rom: &[u8; 1536]) {
 		self.memory.load_rom_into_memory(rom);
 	}
-}
 
+	fn fetch_next_opcode(&self) -> u16 {
+		self.memory.read_unsigned_short(self.registers.pc)
+	} 	
+}
 
 #[cfg(test)]
 mod tests {
@@ -230,12 +242,22 @@ mod tests {
     #[test]
     fn test_load_rom() {
     	let mut memory = Memory { ram: [0; 2048]};
-    	let rom: [u8; 1536] = [0; 1536];
+    	let mut rom: [u8; 1536] = [0; 1536];
     	rom[0] = 0xFF;
     	rom[1] = 0xCC;
 
     	memory.load_rom_into_memory(&rom);
     	assert_eq!(memory.ram[0x200], 0xFF);
     	assert_eq!(memory.ram[0x201], 0xCC);
+    }
+
+    #[test]
+    fn test_read_next_opcode() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0xFF;
+    	chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x77;
+    	let next_opcode = chip8.fetch_next_opcode();
+    	// If fetched in big-endian order, then should match as below:
+    	assert_eq!(65399, next_opcode);
     }
 }

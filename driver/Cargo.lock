@@ -7,8 +7,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "byteorder"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "chip8_emu"
 version = "0.1.0"
+dependencies = [
+ "byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "curl"
@@ -105,6 +113,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
 "checksum curl 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "8fd5a1fdcebdb1a59578c5583e66ffed2d13850eac4f51ff730edf6dd6111eac"
 "checksum curl-sys 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "27d9bb52694cc5e0283214e94321364e582c087d54ac8d5a23eb6bedf1c26b3c"
 "checksum gcc 0.3.38 (registry+https://github.com/rust-lang/crates.io-index)" = "553f11439bdefe755bf366b264820f1da70f3aaf3924e594b886beb9c831bcf5"

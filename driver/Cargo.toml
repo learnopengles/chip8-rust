@@ -1,0 +1,10 @@
+[package]
+name = "chip8_emu_driver"
+version = "0.1.0"
+authors = ["Kevin Brothaler <contact@digipom.com>"]
+
+[dependencies]
+curl = "0.4.1"
+
+[dependencies.chip8_emu]
+path = "../chip8_emu/"

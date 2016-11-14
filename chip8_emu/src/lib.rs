@@ -121,6 +121,11 @@ impl Memory {
 		// Font should be loaded into offset 0x50 (80).
 		self.ram[0x50..0xA0].copy_from_slice(&chip8_fontset);
 	}
+
+	#[inline]
+	fn load_rom_into_memory(&mut self, rom: &[u8; 1536]) {
+		self.ram[0x200..].copy_from_slice(rom);		
+	}
 }
 
 struct Registers {
@@ -149,7 +154,7 @@ struct Display {
 	screen: [[bool; 64]; 32],
 }
 
-struct State {
+pub struct Chip8 {
 	memory: Memory,
 	registers: Registers,
 	stack: Stack,
@@ -157,9 +162,9 @@ struct State {
 	display: Display,
 }
 
-impl State {
-	fn new_and_init() -> State {
-		let mut state = State { 
+impl Chip8 {
+	pub fn new_and_init() -> Chip8 {
+		let mut chip8 = Chip8 { 
 			memory: Memory { ram: [0; 2048]},
 			// Program counter starts at 0x200
 			registers: Registers { pc: 0x200, index: 0, v: [0; 16]},
@@ -167,12 +172,11 @@ impl State {
 			input: Input { keys: [0; 16]},
 			display: Display { screen: [[false; 64]; 32]},
 		};
-		state.reset();
-		return state;
+		chip8.reset();
+		return chip8;
 	}	
-
-	#[inline]
-	fn reset(&mut self) {
+	
+	pub fn reset(&mut self) {
 		self.memory.ram = [0; 2048];
 		self.registers.pc = 0x200;
 		self.registers.index = 0;
@@ -184,12 +188,26 @@ impl State {
 
 		self.memory.load_font_into_memory();
 	}
+
+	pub fn load_rom(&mut self, rom: &[u8; 1536]) {
+		self.memory.load_rom_into_memory(rom);
+	}
 }
+
 
 #[cfg(test)]
 mod tests {
 	use super::Memory;
-    use super::State;
+    use super::Chip8;
+      
+    #[test]
+    fn test_default_state() {
+    	// PC counter should default to 0x200:
+    	let chip8 = Chip8::new_and_init();
+    	assert_eq!(0x200, chip8.registers.pc);
+    	// We should also already have the font in ram:
+    	test_font_in_memory(&chip8.memory);
+    }
 
     #[test]
     fn test_load_font() {
@@ -198,7 +216,6 @@ mod tests {
     	for i in 0..80 {
     		assert_eq!(0, memory.ram[i]);
     	}
-    	
     }
 
     fn test_font_in_memory(memory: &Memory) {
@@ -211,11 +228,14 @@ mod tests {
     }
 
     #[test]
-    fn test_default_state() {
-    	// PC counter should default to 0x200:
-    	let state = State::new_and_init();
-    	assert_eq!(0x200, state.registers.pc);
-    	// We should also already have the font in ram:
-    	test_font_in_memory(&state.memory);
+    fn test_load_rom() {
+    	let mut memory = Memory { ram: [0; 2048]};
+    	let rom: [u8; 1536] = [0; 1536];
+    	rom[0] = 0xFF;
+    	rom[1] = 0xCC;
+
+    	memory.load_rom_into_memory(&rom);
+    	assert_eq!(memory.ram[0x200], 0xFF);
+    	assert_eq!(memory.ram[0x201], 0xCC);
     }
 }

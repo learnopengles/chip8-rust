@@ -1,0 +1,4 @@
+[root]
+name = "chip8_emu"
+version = "0.1.0"
+

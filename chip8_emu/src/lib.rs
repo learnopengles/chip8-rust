@@ -336,7 +336,20 @@ impl Chip8 {
 				}
 
 				self.registers.pc += 2;	
-			}
+			},
+			0x9000...0x9FFF => {
+				// 0x9xy0
+				// Skip next instruction if registers Vx and Vy are NOT equal.
+				// The last octet should be zero but we won't fail on that here.				
+				let reg_x = opcode_register_index_second_octet(opcode);
+				let reg_y = opcode_register_index_third_octet(opcode);
+				
+				if self.registers.v[reg_x] != self.registers.v[reg_y] {
+					self.registers.pc += 4;
+				} else {
+					self.registers.pc += 2;
+				}
+			},
 			_ => {
 				// Unknown opcode, just skip over it.
 				self.registers.pc += 2;
@@ -734,6 +747,27 @@ mod tests {
    		chip8.execute_next_opcode();   		
    		assert_eq!(0b10010100, chip8.registers.v[0xA]);
    		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_9xy0_skip_when_two_registers_not_equal() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x9A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB0;	
+   		chip8.registers.v[0xA] = 0xBB;
+   		chip8.registers.v[0xB] = 0xCC;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x204, chip8.registers.pc);
+    }  
+    #[test]
+    fn test_9xy0_dont_skip_when_two_registers_equal() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x9A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB0;	
+   		chip8.registers.v[0xA] = 0xBB;
+   		chip8.registers.v[0xB] = 0xBB;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x202, chip8.registers.pc);
     }
 
     // TODO clean up the tests using helper functions

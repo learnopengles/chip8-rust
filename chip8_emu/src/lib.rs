@@ -161,7 +161,7 @@ struct Stack {
 
 struct Input {
 	// 16 keys
-	keys: [u8; 16],
+	keys: [bool; 16],
 }
 
 // TODO need a flag when need to update (AFAIK two ops should affect that?)
@@ -196,7 +196,7 @@ impl<R: Rng> Chip8<R> {
 			// Program counter starts at 0x200
 			registers: Registers { pc: 0x200, index: 0, v: [0; 16]},
 			stack: Stack { ret_addresses: [0; 16], sp: 0},
-			input: Input { keys: [0; 16]},
+			input: Input { keys: [false; 16]},
 			display: Display { screen: [[false; 64]; 32], needs_draw: false},
 			rng: r,
 		};
@@ -211,7 +211,7 @@ impl<R: Rng> Chip8<R> {
 		self.registers.v = [0; 16];
 		self.stack.ret_addresses = [0; 16];
 		self.stack.sp = 0;
-		self.input.keys = [0; 16];
+		self.input.keys = [false; 16];
 		self.display.screen = [[false; 64]; 32];
 
 		self.memory.load_font_into_memory();
@@ -420,6 +420,24 @@ impl<R: Rng> Chip8<R> {
 				self.display.needs_draw = true;
 				self.registers.pc += 2;
 			},
+			0xE000...0xEFFF => {
+				// Handle key input
+				let second_byte = opcode_second_byte(opcode);
+				let reg_x = opcode_register_index_second_octet(opcode);
+				let v_x = self.registers.v[reg_x];
+				let key = self.input.keys[v_x as usize];
+
+				if second_byte == 0x9E && key == true {
+					// Skip if key is pressed
+					self.registers.pc += 4;
+				} else if second_byte == 0xA1 && key == false {
+					// Skip if key is NOT pressed
+					self.registers.pc += 4;
+				} else {
+					// Only skip over our own opcode.
+					self.registers.pc += 2;
+				}	
+			},
 			_ => {
 				// Unknown opcode, just skip over it.
 				self.registers.pc += 2;
@@ -427,6 +445,9 @@ impl<R: Rng> Chip8<R> {
 		}
 	}
 }
+
+// TODO names
+// TODO maybe use trait / newtype
 
 #[inline]
 fn opcode_address(opcode: u16) -> u16 {
@@ -446,6 +467,11 @@ fn opcode_register_index_third_octet(opcode: u16) -> usize {
 #[inline]
 fn opcode_operand(opcode: u16) -> u8 {
 	(opcode & 0x00FF) as u8
+}
+
+#[inline]
+fn opcode_second_byte(opcode: u16) -> u8 {
+	opcode_operand(opcode)
 }
 
 #[inline]
@@ -975,6 +1001,50 @@ mod tests {
 
 	   	// Nothing was overwritten
 	   	assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_ex9e_skips_if_key_pressed() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xEA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x9E;
+   		chip8.registers.v[0xA] = 0xB;
+   		chip8.input.keys[0xB] = true;
+   		chip8.execute_next_opcode();
+		assert_eq!(0x204, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_ex9e_doesnt_skip_if_key_not_pressed() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xEA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x9E;
+   		chip8.registers.v[0xA] = 0xB;
+   		chip8.input.keys[0xB] = false;
+   		chip8.execute_next_opcode();
+		assert_eq!(0x202, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_exa1_skips_if_key_not_pressed() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xEA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xA1;
+   		chip8.registers.v[0xA] = 0xB;
+   		chip8.input.keys[0xB] = false;
+   		chip8.execute_next_opcode();
+		assert_eq!(0x204, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_exa1_doesnt_skip_if_key_pressed() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xEA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xA1;
+   		chip8.registers.v[0xA] = 0xB;
+   		chip8.input.keys[0xB] = true;
+   		chip8.execute_next_opcode();
+		assert_eq!(0x202, chip8.registers.pc);
     }
 
     // TODO clean up the tests using helper functions

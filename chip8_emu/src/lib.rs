@@ -283,8 +283,63 @@ impl Chip8 {
 				// TODO where else do I need to do wrapping adds?
 				self.registers.pc += 2;
 			},
+			0x8000...0x8FFF => {
+				let op = last_octet(opcode);
+				let reg_x = opcode_register_index_second_octet(opcode);
+				let reg_y = opcode_register_index_third_octet(opcode);				
+
+				match op {
+					0x0 => {
+						self.registers.v[reg_x] = self.registers.v[reg_y];
+					},
+					0x1 => {
+						self.registers.v[reg_x] |= self.registers.v[reg_y];	
+					},
+					0x2 => {
+						self.registers.v[reg_x] &= self.registers.v[reg_y];		
+					},
+					0x3 => {
+						self.registers.v[reg_x] ^= self.registers.v[reg_y];		
+					},
+					0x4 => {
+						let v_x = self.registers.v[reg_x];
+						let v_y = self.registers.v[reg_y];
+						let (result, did_overflow) = v_x.overflowing_add(v_y);
+						self.registers.v[reg_x] = result;
+						self.registers.v[0xF] = if did_overflow { 1 } else { 0 };						
+					},
+					0x5 => {
+						let v_x = self.registers.v[reg_x];
+						let v_y = self.registers.v[reg_y];
+						self.registers.v[0xF] = if v_x > v_y { 1 } else { 0 };
+						self.registers.v[reg_x] = v_x.wrapping_sub(v_y);						
+					},
+					0x6 => {
+						let v_x = self.registers.v[reg_x];						
+						self.registers.v[0xF] = v_x & 0x1;
+						self.registers.v[reg_x] = v_x.wrapping_shr(1);
+					},
+					0x7 => {
+						let v_x = self.registers.v[reg_x];
+						let v_y = self.registers.v[reg_y];
+						self.registers.v[0xF] = if v_y > v_x { 1 } else { 0 };
+						self.registers.v[reg_x] = v_y.wrapping_sub(v_x);
+					},
+					0xE => {
+						let v_x = self.registers.v[reg_x];
+						self.registers.v[0xF] = (v_x & 0x80) >> 7;
+						self.registers.v[reg_x] = v_x.wrapping_shl(1);
+					},
+					_ => {
+						// Unknown opcode. Just skip over it.
+					}
+				}
+
+				self.registers.pc += 2;	
+			}
 			_ => {
-				// TODO unknown opcode
+				// Unknown opcode, just skip over it.
+				self.registers.pc += 2;
 			}
 		}
 	}
@@ -308,6 +363,11 @@ fn opcode_register_index_third_octet(opcode: u16) -> usize {
 #[inline]
 fn opcode_operand(opcode: u16) -> u8 {
 	(opcode & 0x00FF) as u8
+}
+
+#[inline]
+fn last_octet(opcode: u16) -> u8 {
+	(opcode & 0x000F) as u8
 }
 
 #[cfg(test)]
@@ -515,4 +575,167 @@ mod tests {
    		chip8.execute_next_opcode();   		
    		assert_eq!(0x16, chip8.registers.v[0xA]);
     }
+
+    #[test]
+    fn test_store_one_reg_in_another() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x80;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x10;
+   		chip8.registers.v[0x0] = 0x20;
+   		chip8.registers.v[0x1] = 0x30;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x30, chip8.registers.v[0x0]);
+    }
+
+    #[test]
+    fn test_or() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB1;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xB2, chip8.registers.v[0xA]);
+    }
+
+    #[test]
+    fn test_and() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB2;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x12, chip8.registers.v[0xA]);
+    }
+
+    #[test]
+    fn test_xor() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB3;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xA0, chip8.registers.v[0xA]);
+    }
+
+    #[test]
+    fn test_add_two_regs() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB4;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xC4, chip8.registers.v[0xA]);
+   		assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_add_two_regs_with_overflow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB4;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x92;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x24, chip8.registers.v[0xA]);
+   		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_sub_vy_without_borrow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB5;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x60, chip8.registers.v[0xA]);
+   		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_sub_vy_with_borrow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB5;
+   		chip8.registers.v[0xA] = 0x32;
+   		chip8.registers.v[0xB] = 0x92;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xA0, chip8.registers.v[0xA]);
+   		assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_shr_by_one() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB6;
+   		chip8.registers.v[0xA] = 0b11001010;   		
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0b01100101, chip8.registers.v[0xA]);
+   		assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_shr_by_one_with_truncation() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB6;
+   		chip8.registers.v[0xA] = 0b11001011;   		
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0b01100101, chip8.registers.v[0xA]);
+   		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vy_sub_vx_without_borrow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB7;
+   		chip8.registers.v[0xA] = 0x32;
+   		chip8.registers.v[0xB] = 0x92;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x60, chip8.registers.v[0xA]);
+   		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vy_sub_vx_with_borrow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB7;
+   		chip8.registers.v[0xA] = 0x92;
+   		chip8.registers.v[0xB] = 0x32;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xA0, chip8.registers.v[0xA]);
+   		assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_shl_by_one() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xBE;
+   		chip8.registers.v[0xA] = 0b01001010;   		
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0b10010100, chip8.registers.v[0xA]);
+   		assert_eq!(0x0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_vx_shl_by_one_with_overflow() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x8A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xBE;
+   		chip8.registers.v[0xA] = 0b11001010;   		
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0b10010100, chip8.registers.v[0xA]);
+   		assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    // TODO clean up the tests using helper functions
+    // TODO be more specific about test names
 }

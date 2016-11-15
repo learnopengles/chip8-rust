@@ -542,6 +542,10 @@ impl<R: Rng> Chip8<R> {
 	pub fn get_screen_ref(&self) -> &[[bool; 64]; 32] {
 		&self.display.screen
 	}
+
+	pub fn set_key_state(&mut self, key_index: u8, state: bool) {
+		self.input.keys[key_index as usize] = state;
+	}
 }
 
 // TODO names

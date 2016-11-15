@@ -9,6 +9,7 @@ use chip8_emu::Chip8;
 
 use sdl2::{Sdl};
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Renderer;
@@ -44,6 +45,48 @@ fn main() {
 				Event::Quit { .. } => {
 					// Should tear down everything
 					return;
+				},
+				Event::KeyDown { keycode: Some(key), .. } => {
+					match key {
+						Keycode::Num1	 	=> chip8.set_key_state(0x1, true),
+						Keycode::Num2	 	=> chip8.set_key_state(0x2, true),
+						Keycode::Num3	 	=> chip8.set_key_state(0x3, true),
+						Keycode::Num4	 	=> chip8.set_key_state(0xC, true),
+						Keycode::Q 			=> chip8.set_key_state(0x4, true),
+						Keycode::W 			=> chip8.set_key_state(0x5, true),
+						Keycode::E 			=> chip8.set_key_state(0x6, true),
+						Keycode::R 			=> chip8.set_key_state(0xD, true),
+						Keycode::A 			=> chip8.set_key_state(0x7, true),
+						Keycode::S 			=> chip8.set_key_state(0x8, true),
+						Keycode::D 			=> chip8.set_key_state(0x9, true),
+						Keycode::F 			=> chip8.set_key_state(0xE, true),
+						Keycode::Z 			=> chip8.set_key_state(0xA, true),
+						Keycode::X 			=> chip8.set_key_state(0x0, true),
+						Keycode::C 			=> chip8.set_key_state(0xB, true),
+						Keycode::V 			=> chip8.set_key_state(0xF, true),
+						_					=> {},
+					}
+				},
+				Event::KeyUp { keycode: Some(key), .. } => {
+					match key {
+						Keycode::Num1	 	=> chip8.set_key_state(0x1, false),
+						Keycode::Num2	 	=> chip8.set_key_state(0x2, false),
+						Keycode::Num3	 	=> chip8.set_key_state(0x3, false),
+						Keycode::Num4	 	=> chip8.set_key_state(0xC, false),
+						Keycode::Q 			=> chip8.set_key_state(0x4, false),
+						Keycode::W 			=> chip8.set_key_state(0x5, false),
+						Keycode::E 			=> chip8.set_key_state(0x6, false),
+						Keycode::R 			=> chip8.set_key_state(0xD, false),
+						Keycode::A 			=> chip8.set_key_state(0x7, false),
+						Keycode::S 			=> chip8.set_key_state(0x8, false),
+						Keycode::D 			=> chip8.set_key_state(0x9, false),
+						Keycode::F 			=> chip8.set_key_state(0xE, false),
+						Keycode::Z 			=> chip8.set_key_state(0xA, false),
+						Keycode::X 			=> chip8.set_key_state(0x0, false),
+						Keycode::C 			=> chip8.set_key_state(0xB, false),
+						Keycode::V 			=> chip8.set_key_state(0xF, false),
+						_					=> {},
+					}
 				},
 				_ => {
 					// Skip this event.

@@ -331,7 +331,7 @@ impl<R: Rng> Chip8<R> {
 					0x6 => {
 						let v_x = self.registers.v[reg_x];						
 						self.registers.v[0xF] = v_x & 0x1;
-						self.registers.v[reg_x] = v_x.wrapping_shr(1);
+						self.registers.v[reg_x] = v_x >> 1;
 					},
 					0x7 => {
 						let v_x = self.registers.v[reg_x];
@@ -342,7 +342,7 @@ impl<R: Rng> Chip8<R> {
 					0xE => {
 						let v_x = self.registers.v[reg_x];
 						self.registers.v[0xF] = (v_x & 0x80) >> 7;
-						self.registers.v[reg_x] = v_x.wrapping_shl(1);
+						self.registers.v[reg_x] = v_x << 1;
 					},
 					_ => {
 						// Unknown opcode. Just skip over it.
@@ -383,6 +383,42 @@ impl<R: Rng> Chip8<R> {
 				let next_random: u8 = self.rng.gen();
 				let result = next_random & operand;
 				self.registers.v[reg] = result;
+			},
+			0xD000...0xDFFF => {
+				// Draw a sprite from memory at I at position (Vx, Vy),
+				// and set v[0xF] in the case of a collision.
+				let reg_x = opcode_register_index_second_octet(opcode);
+				let reg_y = opcode_register_index_third_octet(opcode);
+				let v_x = self.registers.v[reg_x];
+				let v_y = self.registers.v[reg_y];
+				let num_bytes = last_octet(opcode);
+				let memory_base = self.registers.index;
+				
+				let mut did_overwrite = false;				
+				
+				// We'll draw in rows of 8 for num_bytes
+				for sprite_y in 0..num_bytes {					
+					let sprite_row = self.memory.ram[(memory_base + sprite_y as u16) as usize];					
+					let screen_y = ((v_y + sprite_y) % 32) as usize;
+					for sprite_x in 0..8 {						
+						// Need to mask off the pixel since each byte represents a row of 8 pixels.
+						let sprite_pixel = if (sprite_row & 0x80 >> sprite_x) > 0 { true } else { false };
+
+						let screen_x = ((v_x + sprite_x) % 64) as usize;
+						let current_pixel = self.display.screen[screen_y][screen_x];
+						let new_pixel = sprite_pixel ^ current_pixel;
+
+						if current_pixel == true {
+							did_overwrite = true;
+						}
+
+						self.display.screen[screen_y][screen_x] = new_pixel;						
+					}
+				}
+
+				self.registers.v[0xF] = if did_overwrite { 1 } else { 0 };
+				self.display.needs_draw = true;
+				self.registers.pc += 2;
 			},
 			_ => {
 				// Unknown opcode, just skip over it.
@@ -806,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn test_Annn_set_index_register_to_address() {
+    fn test_annn_set_index_register_to_address() {
    		let mut chip8 = Chip8::new_and_init();
    		chip8.memory.ram[chip8.registers.pc as usize] = 0xAE;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
@@ -816,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn test_Bnnn_computed_jump() {
+    fn test_bnnn_computed_jump() {
    		let mut chip8 = Chip8::new_and_init();
    		chip8.memory.ram[chip8.registers.pc as usize] = 0xBE;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
@@ -827,8 +863,8 @@ mod tests {
     }
 
     #[test]
-    fn test_Cxkk_random_byte_anded_and_stored() {
-    	let mut first_rng = XorShiftRng::new_unseeded(); 
+    fn test_dxkk_random_byte_anded_and_stored() {
+    	let first_rng = XorShiftRng::new_unseeded(); 
     	let mut second_rng = XorShiftRng::new_unseeded();
     	let mut chip8 = Chip8::new_and_init_with_rng(first_rng);
     	chip8.memory.ram[chip8.registers.pc as usize] = 0xCA;
@@ -841,6 +877,104 @@ mod tests {
    		let next_random: u8 = second_rng.gen();
    		let computed_result = next_random & 0xAA;
    		assert_eq!(result, computed_result);
+    }
+
+    #[test]
+    fn test_dxyn_blit_sprite() {
+    	let mut chip8 = Chip8::new_and_init();
+   		
+   		// Blit "0" from the font which has dimensions of 8x5
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xDA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB5;	   	   		
+   		chip8.registers.v[0xA] = 0x0;
+   		chip8.registers.v[0xB] = 0x0;
+   		chip8.registers.index = 0x50;
+   		chip8.execute_next_opcode();
+
+   		// Zero
+		// 0b11110000,
+		// 0b10010000,
+		// 0b10010000,
+		// 0b10010000,
+		// 0b11110000,
+
+   		// Check the display
+
+   		// First row and fifth row
+   		for y in [0, 4].iter() { 
+   			let y = *y;  			
+	   		assert_eq!(true,  chip8.display.screen[y][0]);
+	   		assert_eq!(true,  chip8.display.screen[y][1]);
+	   		assert_eq!(true,  chip8.display.screen[y][2]);
+	   		assert_eq!(true,  chip8.display.screen[y][3]);
+	   		assert_eq!(false, chip8.display.screen[y][4]);
+	   		assert_eq!(false, chip8.display.screen[y][5]);
+	   		assert_eq!(false, chip8.display.screen[y][6]);
+	   		assert_eq!(false, chip8.display.screen[y][7]);
+	   	}
+
+   		// Second through fourth rows
+
+   		for y in 1..4 {
+	   		assert_eq!(true,  chip8.display.screen[y][0]);
+	   		assert_eq!(false, chip8.display.screen[y][1]);
+	   		assert_eq!(false, chip8.display.screen[y][2]);
+	   		assert_eq!(true,  chip8.display.screen[y][3]);
+	   		assert_eq!(false, chip8.display.screen[y][4]);
+	   		assert_eq!(false, chip8.display.screen[y][5]);
+	   		assert_eq!(false, chip8.display.screen[y][6]);
+	   		assert_eq!(false, chip8.display.screen[y][7]);
+	   	}
+
+	   	// Nothing was overwritten
+	   	assert_eq!(0x0, chip8.registers.v[0xF]);
+
+	   	// Draw over the same position again
+	   	chip8.memory.ram[chip8.registers.pc as usize] = 0xDA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB5;
+   		chip8.execute_next_opcode();
+
+   		// Now everything should be cleared because of XOR.
+   		for y in 0..5 {
+   			for x in 0..8 {
+   				assert_eq!(false, chip8.display.screen[y][x]);
+   			}
+   		}
+
+   		// The zero was cleared.   		
+	   	assert_eq!(0x1, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_dxyn_blit_sprite_wraps_around_edge_of_screen() {
+    	let mut chip8 = Chip8::new_and_init();
+   		
+   		// This time we're going to blit a solid 8x8 block at (60, 28).
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xDA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB8;
+   		chip8.registers.v[0xA] = 60;
+   		chip8.registers.v[0xB] = 28;
+   		chip8.registers.index = 0x400;
+
+   		for y in 0x400..0x408 {
+   			chip8.memory.ram[y] = 0xFF;
+   		}
+
+   		chip8.execute_next_opcode();
+
+   		// Should have wrapped around
+   		for y in 28..32 {
+   			let y = y % 32;
+
+   			for x in 60..68 {
+   				let x = x % 64;
+
+   				assert_eq!(true, chip8.display.screen[y][x]);
+   			}
+   		}
+
+	   	// Nothing was overwritten
+	   	assert_eq!(0x0, chip8.registers.v[0xF]);
     }
 
     // TODO clean up the tests using helper functions

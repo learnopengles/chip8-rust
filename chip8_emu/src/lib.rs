@@ -1,3 +1,4 @@
+// TODO remove this external dependency
 extern crate byteorder;
 
 use byteorder::{BigEndian, ByteOrder};
@@ -5,6 +6,8 @@ use byteorder::{BigEndian, ByteOrder};
 struct Memory {
 	ram: [u8; 2048],
 }
+
+// TODO reorganize?
 
 impl Memory {
 	fn load_font_into_memory(&mut self) {
@@ -148,7 +151,7 @@ struct Registers {
 
 struct Stack {
 	// 16 stack addresses
-	stack: [u16; 16],
+	ret_addresses: [u16; 16],
 	// Stack pointer
 	sp: u16,
 }
@@ -158,9 +161,12 @@ struct Input {
 	keys: [u8; 16],
 }
 
+// TODO need a flag when need to update (AFAIK two ops should affect that?)
+
 struct Display {
 	//  64x32, black or white
 	screen: [[bool; 64]; 32],
+	needs_draw: bool,
 }
 
 pub struct Chip8 {
@@ -177,9 +183,9 @@ impl Chip8 {
 			memory: Memory { ram: [0; 2048]},
 			// Program counter starts at 0x200
 			registers: Registers { pc: 0x200, index: 0, v: [0; 16]},
-			stack: Stack { stack: [0; 16], sp: 0},
+			stack: Stack { ret_addresses: [0; 16], sp: 0},
 			input: Input { keys: [0; 16]},
-			display: Display { screen: [[false; 64]; 32]},
+			display: Display { screen: [[false; 64]; 32], needs_draw: false},
 		};
 		chip8.reset();
 		return chip8;
@@ -190,7 +196,7 @@ impl Chip8 {
 		self.registers.pc = 0x200;
 		self.registers.index = 0;
 		self.registers.v = [0; 16];
-		self.stack.stack = [0; 16];
+		self.stack.ret_addresses = [0; 16];
 		self.stack.sp = 0;
 		self.input.keys = [0; 16];
 		self.display.screen = [[false; 64]; 32];
@@ -200,26 +206,53 @@ impl Chip8 {
 
 	pub fn load_rom(&mut self, rom: &[u8; 1536]) {
 		self.memory.load_rom_into_memory(rom);
-	}
+	}	
 
-	fn fetch_next_opcode(&self) -> u16 {
-		self.memory.read_unsigned_short(self.registers.pc)
-	} 	
+	fn execute_next_opcode(&mut self) {
+		let opcode = self.memory.read_unsigned_short(self.registers.pc);				
+		match opcode {
+			0x00E0 => {
+				// Clear the screen.
+				self.display.screen = [[false; 64]; 32];
+				self.display.needs_draw = true;
+				self.registers.pc += 2;
+			},
+			0x00EE => {
+				// Return from a subroutine.
+				self.stack.sp -= 1;
+				self.registers.pc = self.stack.ret_addresses[self.stack.sp as usize];
+			},
+			0x1000...0x1FFF => {
+				// Jump
+				let address = get_address_from_opcode(opcode);
+				self.registers.pc = address;
+			},
+			0x2000...0x2FFF => {
+				// Call a subroutine.
+				// The return address should be after the opcode we're executing now.
+				self.stack.ret_addresses[self.stack.sp as usize] = self.registers.pc + 2;
+				self.stack.sp += 1;
+				// Jump to the address in the opcode.
+				let address = get_address_from_opcode(opcode);
+				self.registers.pc = address;
+			},
+			_ => {
+				// TODO unknown opcode
+			}
+		}
+	}
+}
+
+fn get_address_from_opcode(opcode: u16) -> u16 {
+	opcode & 0x0FFF
 }
 
 #[cfg(test)]
 mod tests {
 	use super::Memory;
     use super::Chip8;
-      
-    #[test]
-    fn test_default_state() {
-    	// PC counter should default to 0x200:
-    	let chip8 = Chip8::new_and_init();
-    	assert_eq!(0x200, chip8.registers.pc);
-    	// We should also already have the font in ram:
-    	test_font_in_memory(&chip8.memory);
-    }
+
+    /// Memory tests ///  
 
     #[test]
     fn test_load_font() {
@@ -252,12 +285,79 @@ mod tests {
     }
 
     #[test]
-    fn test_read_next_opcode() {
+    fn test_read_unsigned_short() {
     	let mut chip8 = Chip8::new_and_init();
     	chip8.memory.ram[chip8.registers.pc as usize] = 0xFF;
     	chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x77;
-    	let next_opcode = chip8.fetch_next_opcode();
+    	let next_opcode = chip8.memory.read_unsigned_short(chip8.registers.pc);
     	// If fetched in big-endian order, then should match as below:
     	assert_eq!(65399, next_opcode);
     }
+
+    /// State tests ///
+      
+    #[test]
+    fn test_default_state() {
+    	// PC counter should default to 0x200:
+    	let chip8 = Chip8::new_and_init();
+    	assert_eq!(0x200, chip8.registers.pc);
+    	// We should also already have the font in ram:
+    	test_font_in_memory(&chip8.memory);
+    }
+
+    /// Opcode tests ///
+
+    #[test]
+    fn test_clear_screen() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.display.screen[0][0] = true;	
+    	chip8.display.screen[0][1] = true;
+    	chip8.display.screen[0][2] = true;
+
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x00;
+    	chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xE0;
+    	chip8.execute_next_opcode();
+
+    	assert_eq!(false, chip8.display.screen[0][0]);
+    	assert_eq!(false, chip8.display.screen[0][1]);
+    	assert_eq!(false, chip8.display.screen[0][2]);
+    }
+
+    #[test]
+    fn test_jump() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x1E;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
+   		chip8.execute_next_opcode();
+
+   		assert_eq!(0xEEE, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_push_and_pop_stack() {
+    	let mut chip8 = Chip8::new_and_init();
+    	// Call subroutine at 2000
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x27;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xD0;
+
+   		// Return back to caller
+   		chip8.memory.ram[2000] = 0x00;
+   		chip8.memory.ram[2001] = 0xEE;
+
+   		// We won't execute this, will just use it to see that it's our next expected instruction.
+   		chip8.memory.ram[(chip8.registers.pc + 2) as usize] = 0xAA;
+   		chip8.memory.ram[(chip8.registers.pc + 3) as usize] = 0xAA;
+
+   		// Execute first instruction -- should jump us to address 2000.
+   		chip8.execute_next_opcode();
+   		assert_eq!(2000, chip8.registers.pc);
+
+   		// Next instruction should bring us back to the caller address + 2.
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x200 + 2, chip8.registers.pc);
+
+   		// Next two instructions should match 0xAAAA 
+   		let next_opcode = chip8.memory.read_unsigned_short(chip8.registers.pc);
+   		assert_eq!(0xAAAA, next_opcode);
+    }      
 }

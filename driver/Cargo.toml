@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Kevin Brothaler <contact@digipom.com>"]
 
 [dependencies]
-curl = "0.4.1"
+sdl2 = "0.25.0"
 
 [dependencies.chip8_emu]
 path = "../chip8_emu/"

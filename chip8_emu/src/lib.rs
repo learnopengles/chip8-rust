@@ -1,8 +1,3 @@
-// TODO remove this external dependency
-extern crate byteorder;
-
-use byteorder::{BigEndian, ByteOrder};
-
 struct Memory {
 	ram: [u8; 2048],
 }
@@ -134,9 +129,13 @@ impl Memory {
 		self.ram[0x200..].copy_from_slice(rom);		
 	}
 
+	// TODO maybe shouldn't be here? Doesn't really convey knowledge that the opcodes
+	// are big-endian.
 	#[inline]
 	fn read_unsigned_short(&self, position: u16) -> u16 {
-		BigEndian::read_u16(&self.ram[position as usize..])		
+		let msb = self.ram[position as usize];
+		let lsb = self.ram[(position + 1) as usize];
+		return ((msb as u16) << 8) | (lsb as u16);		
 	}
 }
 
@@ -224,7 +223,7 @@ impl Chip8 {
 			},
 			0x1000...0x1FFF => {
 				// Jump
-				let address = get_address_from_opcode(opcode);
+				let address = opcode_address(opcode);
 				self.registers.pc = address;
 			},
 			0x2000...0x2FFF => {
@@ -233,8 +232,18 @@ impl Chip8 {
 				self.stack.ret_addresses[self.stack.sp as usize] = self.registers.pc + 2;
 				self.stack.sp += 1;
 				// Jump to the address in the opcode.
-				let address = get_address_from_opcode(opcode);
+				let address = opcode_address(opcode);
 				self.registers.pc = address;
+			},
+			0x3000...0x3FFF => {
+				// Skip next instruction if register Vx is equal to last two bytes.
+				let reg = opcode_register_index(opcode);
+				let operand = opcode_operand(opcode);
+				if self.registers.v[reg] == operand {
+					self.registers.pc += 4;
+				} else {
+					self.registers.pc += 2;
+				}
 			},
 			_ => {
 				// TODO unknown opcode
@@ -243,8 +252,19 @@ impl Chip8 {
 	}
 }
 
-fn get_address_from_opcode(opcode: u16) -> u16 {
+#[inline]
+fn opcode_address(opcode: u16) -> u16 {
 	opcode & 0x0FFF
+}
+
+#[inline]
+fn opcode_register_index(opcode: u16) -> usize {
+	((opcode & 0x0F00) >> 8) as usize
+}
+
+#[inline]
+fn opcode_operand(opcode: u16) -> u8 {
+	(opcode & 0x00FF) as u8
 }
 
 #[cfg(test)]
@@ -360,4 +380,24 @@ mod tests {
    		let next_opcode = chip8.memory.read_unsigned_short(chip8.registers.pc);
    		assert_eq!(0xAAAA, next_opcode);
     }      
+    #[test]
+    fn test_skip_instruction_doesnt_skip() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x3A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
+   		// Doesn't match default mem value of 0x00, should only increment program counter by two.
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x202, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_skip_instruction_skips() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x3A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
+   		// If register V[A] == 0xDD, then we should skip
+   		chip8.registers.v[0xA] = 0xDD;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x204, chip8.registers.pc);
+    }  
 }

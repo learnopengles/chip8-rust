@@ -172,12 +172,19 @@ struct Display {
 	needs_draw: bool,
 }
 
+struct Timers {
+	// Delay timer
+	delay_timer: u8,
+	sound_timer: u8,
+}
+
 pub struct Chip8<R: Rng> {
 	memory: Memory,
 	registers: Registers,
 	stack: Stack,
 	input: Input,
 	display: Display,
+	timers: Timers,
 	rng: R,
 }
 
@@ -198,6 +205,7 @@ impl<R: Rng> Chip8<R> {
 			stack: Stack { ret_addresses: [0; 16], sp: 0},
 			input: Input { keys: [false; 16]},
 			display: Display { screen: [[false; 64]; 32], needs_draw: false},
+			timers: Timers { delay_timer: 0, sound_timer: 0},
 			rng: r,
 		};
 		chip8.reset();
@@ -213,6 +221,9 @@ impl<R: Rng> Chip8<R> {
 		self.stack.sp = 0;
 		self.input.keys = [false; 16];
 		self.display.screen = [[false; 64]; 32];
+		self.display.needs_draw = true;
+		self.timers.delay_timer = 0;
+		self.timers.sound_timer = 0;
 
 		self.memory.load_font_into_memory();
 	}
@@ -221,7 +232,7 @@ impl<R: Rng> Chip8<R> {
 		self.memory.load_rom_into_memory(rom);
 	}	
 
-	fn execute_next_opcode(&mut self) {
+	pub fn execute_next_opcode(&mut self) {
 		let opcode = self.memory.read_unsigned_short(self.registers.pc);				
 		match opcode {
 			0x00E0 => {
@@ -438,10 +449,93 @@ impl<R: Rng> Chip8<R> {
 					self.registers.pc += 2;
 				}	
 			},
+			0xF000...0xFFFF => {
+				let second_byte = opcode_second_byte(opcode);
+				let reg_x = opcode_register_index_second_octet(opcode);				
+
+				match second_byte {
+					0x07 => {
+						// Delay timer value
+						self.registers.v[reg_x] = self.timers.delay_timer;
+						self.registers.pc += 2;
+					},
+					0x0A => {
+						// Check if key pressed; only continue execution if pressed.
+						for (i, key) in self.input.keys.iter().enumerate() {
+							if *key == true {
+								self.registers.v[reg_x] = i as u8;
+								self.registers.pc += 2;
+								break;
+							}
+						}
+					},
+					0x15 => {
+						// Set delay timer
+						self.timers.delay_timer = self.registers.v[reg_x];						
+						self.registers.pc += 2;
+					},
+					0x18 => {
+						// Set sound timer
+						self.timers.sound_timer = self.registers.v[reg_x];						
+						self.registers.pc += 2;
+					},
+					0x1E => {
+						// Increment index
+						let new_index = self.registers.index.wrapping_add(self.registers.v[reg_x] as u16);
+						self.registers.index = new_index;									
+						self.registers.pc += 2;
+					},
+					0x29 => {
+						// Location of sprite
+						let sprite_index = self.registers.v[reg_x];
+						let sprite_location: u16 = 0x50 + 5 * (sprite_index as u16);
+						self.registers.index = sprite_location;						
+						self.registers.pc += 2;
+					},
+					0x33 => {
+						// Converts register to decimal format in memory at location pointed to by index.
+						let v_x = self.registers.v[reg_x];
+						let index = self.registers.index as usize;
+
+						// Hundredth's digit
+						self.memory.ram[index] = v_x / 100;
+						// Tenth's digit
+						self.memory.ram[index + 1] = (v_x / 10) % 10;
+						// One's digit
+						self.memory.ram[index + 2] = (v_x % 100) % 10;
+						self.registers.pc += 2;
+					},
+					0x55 => {
+						// Spill registers from 0 to x to memory.
+						let index = self.registers.index as usize;
+						self.memory.ram[index..index + reg_x].copy_from_slice(&self.registers.v[0..reg_x]);						
+						self.registers.pc += 2;
+					},
+					0x65 => {
+						// Load memory into registers from 0 to x.
+						let index = self.registers.index as usize;
+						self.registers.v[0..reg_x].copy_from_slice(&self.memory.ram[index..index + reg_x]);
+						self.registers.pc += 2;
+					}
+					_ => {
+						// Unknown opcode. Just skip over it.
+						self.registers.pc += 2;
+					}
+				}
+			},
 			_ => {
 				// Unknown opcode, just skip over it.
 				self.registers.pc += 2;
 			}
+		}
+	}
+
+	pub fn update_timers(&mut self) {
+		if self.timers.delay_timer > 0 {
+			self.timers.delay_timer -= 1;
+		}
+		if self.timers.sound_timer > 0 {
+			self.timers.sound_timer -= 1;
 		}
 	}
 }
@@ -1045,6 +1139,134 @@ mod tests {
    		chip8.input.keys[0xB] = true;
    		chip8.execute_next_opcode();
 		assert_eq!(0x202, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_fx07_delay_timer_value_put_in_register() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFC;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x07;
+   		chip8.timers.delay_timer = 60;
+   		chip8.execute_next_opcode();   	
+		assert_eq!(60, chip8.registers.v[0xC]);
+    }
+
+    #[test]
+    fn test_fx0a_continues_only_when_key_pressed() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFC;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x0A;
+   		
+   		// PC shouldn't advance since no key is pressed.
+   		for _ in 0..500 {
+   			chip8.execute_next_opcode();
+   		}
+   		// Now that a key is pressed, execution should advance to the next opcode.
+   		// The first key pressed should be detected and placed in the given register.
+		assert_eq!(0x200, chip8.registers.pc);
+		chip8.input.keys[5] = true;
+		chip8.input.keys[6] = true;
+		chip8.execute_next_opcode();
+		assert_eq!(0x202, chip8.registers.pc);
+		assert_eq!(5, chip8.registers.v[0xC]);
+    }
+
+    #[test]
+    fn test_fx15_set_delay_timer_from_register() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFC;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x15;
+   		chip8.registers.v[0xC] = 60;   		
+   		chip8.execute_next_opcode();   	
+		assert_eq!(60, chip8.timers.delay_timer);
+    }
+
+    #[test]
+    fn test_fx18_set_sound_timer_from_register() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFC;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x18;
+   		chip8.registers.v[0xC] = 60;   		
+   		chip8.execute_next_opcode();   	
+		assert_eq!(60, chip8.timers.sound_timer);
+    }
+
+    #[test]
+    fn test_fx1e_add_to_index() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFD;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x1E;
+   		chip8.registers.index = 500;
+   		chip8.registers.v[0xD] = 60;   		
+   		chip8.execute_next_opcode();   	
+		assert_eq!(560, chip8.registers.index);
+    }
+
+    #[test]
+    fn test_opcode_fx29_get_location_of_sprite() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFE;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x29;   		
+   		chip8.registers.v[0xE] = 0;
+   		chip8.execute_next_opcode();  
+   		// Character zero is at 0x50 	
+		assert_eq!(0x50, chip8.registers.index);
+
+		chip8.memory.ram[chip8.registers.pc as usize] = 0xFE;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x29;   		
+   		chip8.registers.v[0xE] = 1;
+   		chip8.execute_next_opcode();  
+   		// Character one is at 0x55
+		assert_eq!(0x55, chip8.registers.index);
+    }
+
+    #[test]
+    fn test_opcode_fx33_decimal_representation_of_register() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFF;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x33;
+   		chip8.registers.v[0xF] = 123;
+   		chip8.registers.index = 1000;
+   		chip8.execute_next_opcode();   	
+		assert_eq!(1, chip8.memory.ram[1000]);
+		assert_eq!(2, chip8.memory.ram[1001]);
+		assert_eq!(3, chip8.memory.ram[1002]);
+    }
+
+    #[test]
+    fn test_opcode_fx55_spill_registers_to_memory() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xF4;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x55;
+   		for i in 0..16 {
+   			chip8.registers.v[i] = (i + 1) as u8;
+   		}
+   		chip8.registers.index = 1000;
+		chip8.execute_next_opcode();
+
+		assert_eq!(1, chip8.memory.ram[1000]);
+		assert_eq!(2, chip8.memory.ram[1001]);
+		assert_eq!(3, chip8.memory.ram[1002]);
+		assert_eq!(4, chip8.memory.ram[1003]);
+		assert_eq!(0, chip8.memory.ram[1004]);   		
+    }
+
+    #[test]
+    fn test_opcode_fx55_load_memory_into_registers() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xF4;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x65;
+   		for i in 0..16 {
+   			chip8.memory.ram[1000 + i] = (i + 1) as u8;
+   		}
+   		chip8.registers.index = 1000;
+		chip8.execute_next_opcode();
+
+		assert_eq!(1, chip8.registers.v[0]);
+		assert_eq!(2, chip8.registers.v[1]);
+		assert_eq!(3, chip8.registers.v[2]);
+		assert_eq!(4, chip8.registers.v[3]);
+		assert_eq!(0, chip8.registers.v[4]);		
     }
 
     // TODO clean up the tests using helper functions

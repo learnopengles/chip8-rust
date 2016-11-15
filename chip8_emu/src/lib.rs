@@ -1,3 +1,7 @@
+extern crate rand;
+
+use rand::{Rng, SeedableRng, XorShiftRng};
+
 struct Memory {
 	ram: [u8; 2048],
 }
@@ -168,16 +172,25 @@ struct Display {
 	needs_draw: bool,
 }
 
-pub struct Chip8 {
+pub struct Chip8<R: Rng> {
 	memory: Memory,
 	registers: Registers,
 	stack: Stack,
 	input: Input,
 	display: Display,
+	rng: R,
 }
 
-impl Chip8 {
-	pub fn new_and_init() -> Chip8 {
+// TODO docs
+// Use a fast RNG as the default.
+impl Chip8<XorShiftRng> {
+	pub fn new_and_init() -> Chip8<XorShiftRng> {
+		Chip8::new_and_init_with_rng(SeedableRng::from_seed(rand::random()))
+	}
+}
+
+impl<R: Rng> Chip8<R> {		
+	pub fn new_and_init_with_rng(r: R) -> Chip8<R> {
 		let mut chip8 = Chip8 { 
 			memory: Memory { ram: [0; 2048]},
 			// Program counter starts at 0x200
@@ -185,6 +198,7 @@ impl Chip8 {
 			stack: Stack { ret_addresses: [0; 16], sp: 0},
 			input: Input { keys: [0; 16]},
 			display: Display { screen: [[false; 64]; 32], needs_draw: false},
+			rng: r,
 		};
 		chip8.reset();
 		return chip8;
@@ -350,6 +364,26 @@ impl Chip8 {
 					self.registers.pc += 2;
 				}
 			},
+			0xA000...0xAFFF => {
+				// Set index register to address.
+				let address = opcode_address(opcode);
+				self.registers.index = address;
+				self.registers.pc += 2;
+			},
+			0xB000...0xBFFF => {
+				// Jump to address + V0.
+				let address = opcode_address(opcode);
+				let computed_address = address.wrapping_add(self.registers.v[0x0] as u16);
+				self.registers.pc = computed_address;
+			},
+			0xC000...0xCFFF => {
+				// Ckxx - Takes a random number and ANDS it with the specified register.
+				let reg = opcode_register_index_second_octet(opcode);
+				let operand = opcode_operand(opcode);
+				let next_random: u8 = self.rng.gen();
+				let result = next_random & operand;
+				self.registers.v[reg] = result;
+			},
 			_ => {
 				// Unknown opcode, just skip over it.
 				self.registers.pc += 2;
@@ -385,6 +419,7 @@ fn last_octet(opcode: u16) -> u8 {
 
 #[cfg(test)]
 mod tests {
+	use rand::{Rng, XorShiftRng};
 	use super::Memory;
     use super::Chip8;
 
@@ -768,6 +803,44 @@ mod tests {
    		chip8.registers.v[0xB] = 0xBB;
    		chip8.execute_next_opcode();
    		assert_eq!(0x202, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_Annn_set_index_register_to_address() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xAE;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
+   		chip8.execute_next_opcode();
+
+   		assert_eq!(0xEEE, chip8.registers.index);
+    }
+
+    #[test]
+    fn test_Bnnn_computed_jump() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xBE;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
+   		chip8.registers.v[0x0] = 0xBB;
+   		chip8.execute_next_opcode();
+
+   		assert_eq!(0xFA9, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_Cxkk_random_byte_anded_and_stored() {
+    	let mut first_rng = XorShiftRng::new_unseeded(); 
+    	let mut second_rng = XorShiftRng::new_unseeded();
+    	let mut chip8 = Chip8::new_and_init_with_rng(first_rng);
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0xCA;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xAA;
+   		chip8.execute_next_opcode();
+
+   		let result = chip8.registers.v[0xA];
+
+   		// Compute a result and see if it matches
+   		let next_random: u8 = second_rng.gen();
+   		let computed_result = next_random & 0xAA;
+   		assert_eq!(result, computed_result);
     }
 
     // TODO clean up the tests using helper functions

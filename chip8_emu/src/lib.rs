@@ -538,6 +538,10 @@ impl<R: Rng> Chip8<R> {
 			self.timers.sound_timer -= 1;
 		}
 	}
+
+	pub fn get_screen_ref(&self) -> &[[bool; 64]; 32] {
+		&self.display.screen
+	}
 }
 
 // TODO names

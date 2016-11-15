@@ -8,8 +8,10 @@ use std::io::{Read, Write};
 use chip8_emu::Chip8;
 
 use sdl2::{Sdl};
-use sdl2::pixels::PixelFormatEnum::BGR24;
-use sdl2::render::{Renderer, Texture, TextureAccess};
+use sdl2::event::Event;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+use sdl2::render::Renderer;
 
 fn main() {
 	let mut buffer = [0u8; 1536];
@@ -30,13 +32,14 @@ fn main() {
 
 	let video = sdl.video().unwrap();
 	let window = video.window("Chip 8 emu", 640, 320).build().unwrap();
-	let renderer = window.renderer().accelerated().present_vsync().build().unwrap();
-	let texture = renderer.create_texture(BGR24, TextureAccess::Streaming, 640, 320).unwrap();
+	let mut renderer = window.renderer().accelerated().present_vsync().build().unwrap();	
 	
 	// TODO this burns up 100% of CPU
+	// TODO update timers by using elapsed time
 	loop {
-		for event in event_pump.poll_iter() {
-			use sdl2::event::Event;
+
+		// TODO process events
+		for event in event_pump.poll_iter() {			
 			match event {
 				Event::Quit { .. } => {
 					// Should tear down everything
@@ -47,5 +50,35 @@ fn main() {
 				}
 			}
 		}
+
+		// Updating the emu
+		// Note that this should really be done on a timer
+		for _ in 0..10 {
+			chip8.execute_next_opcode();
+		}
+		chip8.update_timers();
+
+		// Drawing
+		// Note that we're not making use of the emu draw flag since we're drawing whatever we find.
+		{
+			renderer.clear();
+			let emu_screen = chip8.get_screen_ref();
+			for y in 0..32 {
+				for x in 0..63 {
+					let is_active_cell = emu_screen[y][x];
+					if is_active_cell {
+						renderer.set_draw_color(Color::RGB(255, 255, 224));
+					} else {
+						renderer.set_draw_color(Color::RGB(0, 0, 0));
+					}
+					let rect = Rect::new(x as i32 * 8, y as i32 * 8, 8, 8);
+					renderer.fill_rect(rect).unwrap();
+				}
+			}
+			renderer.present();
+		}
+
+		// TODO sound??
+		// TODO input??	
 	}
 }

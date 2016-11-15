@@ -3,7 +3,7 @@ extern crate rand;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
 struct Memory {
-	ram: [u8; 2048],
+	ram: [u8; 4096],
 }
 
 // TODO reorganize?
@@ -129,7 +129,7 @@ impl Memory {
 	}
 
 	#[inline]
-	fn load_rom_into_memory(&mut self, rom: &[u8; 1536]) {
+	fn load_rom_into_memory(&mut self, rom: &[u8; 3584]) {
 		self.ram[0x200..].copy_from_slice(rom);		
 	}
 
@@ -147,7 +147,7 @@ struct Registers {
 	// Program counter
 	pc: u16,
 	// Index register
-	index: u16,
+	i: u16,
 	// 15 general-purpose registers + 1 carry flag
 	v: [u8; 16],
 }
@@ -156,7 +156,7 @@ struct Stack {
 	// 16 stack addresses
 	ret_addresses: [u16; 16],
 	// Stack pointer
-	sp: u16,
+	sp: u8,
 }
 
 struct Input {
@@ -199,36 +199,20 @@ impl Chip8<XorShiftRng> {
 impl<R: Rng> Chip8<R> {		
 	pub fn new_and_init_with_rng(r: R) -> Chip8<R> {
 		let mut chip8 = Chip8 { 
-			memory: Memory { ram: [0; 2048]},
+			memory: Memory { ram: [0; 4096]},
 			// Program counter starts at 0x200
-			registers: Registers { pc: 0x200, index: 0, v: [0; 16]},
+			registers: Registers { pc: 0x200, i: 0, v: [0; 16]},
 			stack: Stack { ret_addresses: [0; 16], sp: 0},
 			input: Input { keys: [false; 16]},
 			display: Display { screen: [[false; 64]; 32], needs_draw: false},
 			timers: Timers { delay_timer: 0, sound_timer: 0},
 			rng: r,
 		};
-		chip8.reset();
+		chip8.memory.load_font_into_memory();
 		return chip8;
 	}	
-	
-	pub fn reset(&mut self) {
-		self.memory.ram = [0; 2048];
-		self.registers.pc = 0x200;
-		self.registers.index = 0;
-		self.registers.v = [0; 16];
-		self.stack.ret_addresses = [0; 16];
-		self.stack.sp = 0;
-		self.input.keys = [false; 16];
-		self.display.screen = [[false; 64]; 32];
-		self.display.needs_draw = true;
-		self.timers.delay_timer = 0;
-		self.timers.sound_timer = 0;
 
-		self.memory.load_font_into_memory();
-	}
-
-	pub fn load_rom(&mut self, rom: &[u8; 1536]) {
+	pub fn load_rom(&mut self, rom: &[u8; 3584]) {
 		self.memory.load_rom_into_memory(rom);
 	}	
 
@@ -378,7 +362,7 @@ impl<R: Rng> Chip8<R> {
 			0xA000...0xAFFF => {
 				// Set index register to address.
 				let address = opcode_address(opcode);
-				self.registers.index = address;
+				self.registers.i = address;
 				self.registers.pc += 2;
 			},
 			0xB000...0xBFFF => {
@@ -394,6 +378,7 @@ impl<R: Rng> Chip8<R> {
 				let next_random: u8 = self.rng.gen();
 				let result = next_random & operand;
 				self.registers.v[reg] = result;
+				self.registers.pc += 2;
 			},
 			0xD000...0xDFFF => {
 				// Draw a sprite from memory at I at position (Vx, Vy),
@@ -403,7 +388,7 @@ impl<R: Rng> Chip8<R> {
 				let v_x = self.registers.v[reg_x];
 				let v_y = self.registers.v[reg_y];
 				let num_bytes = last_octet(opcode);
-				let memory_base = self.registers.index;
+				let memory_base = self.registers.i;
 				
 				let mut did_overwrite = false;				
 				
@@ -481,21 +466,21 @@ impl<R: Rng> Chip8<R> {
 					},
 					0x1E => {
 						// Increment index
-						let new_index = self.registers.index.wrapping_add(self.registers.v[reg_x] as u16);
-						self.registers.index = new_index;									
+						let new_index = self.registers.i.wrapping_add(self.registers.v[reg_x] as u16);
+						self.registers.i = new_index;									
 						self.registers.pc += 2;
 					},
 					0x29 => {
 						// Location of sprite
 						let sprite_index = self.registers.v[reg_x];
 						let sprite_location: u16 = 0x50 + 5 * (sprite_index as u16);
-						self.registers.index = sprite_location;						
+						self.registers.i = sprite_location;						
 						self.registers.pc += 2;
 					},
 					0x33 => {
 						// Converts register to decimal format in memory at location pointed to by index.
 						let v_x = self.registers.v[reg_x];
-						let index = self.registers.index as usize;
+						let index = self.registers.i as usize;
 
 						// Hundredth's digit
 						self.memory.ram[index] = v_x / 100;
@@ -507,14 +492,18 @@ impl<R: Rng> Chip8<R> {
 					},
 					0x55 => {
 						// Spill registers from 0 to x to memory.
-						let index = self.registers.index as usize;
+						let index = self.registers.i as usize;
 						self.memory.ram[index..index + reg_x].copy_from_slice(&self.registers.v[0..reg_x]);						
-						self.registers.pc += 2;
+						// TODO unit test this
+						self.registers.i = self.registers.i.wrapping_add((reg_x + 1) as u16);
+						self.registers.pc += 2;						
 					},
 					0x65 => {
 						// Load memory into registers from 0 to x.
-						let index = self.registers.index as usize;
+						let index = self.registers.i as usize;						
 						self.registers.v[0..reg_x].copy_from_slice(&self.memory.ram[index..index + reg_x]);
+						// TODO unit test this
+						self.registers.i = self.registers.i.wrapping_add((reg_x + 1) as u16);
 						self.registers.pc += 2;
 					}
 					_ => {
@@ -591,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_load_font() {
-    	let mut memory = Memory { ram: [0; 2048]};
+    	let mut memory = Memory { ram: [0; 4096]};
     	memory.load_font_into_memory();
     	for i in 0..80 {
     		assert_eq!(0, memory.ram[i]);
@@ -976,7 +965,7 @@ mod tests {
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xEE;
    		chip8.execute_next_opcode();
 
-   		assert_eq!(0xEEE, chip8.registers.index);
+   		assert_eq!(0xEEE, chip8.registers.i);
     }
 
     #[test]
@@ -1016,7 +1005,7 @@ mod tests {
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB5;	   	   		
    		chip8.registers.v[0xA] = 0x0;
    		chip8.registers.v[0xB] = 0x0;
-   		chip8.registers.index = 0x50;
+   		chip8.registers.i = 0x50;
    		chip8.execute_next_opcode();
 
    		// Zero
@@ -1082,7 +1071,7 @@ mod tests {
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB8;
    		chip8.registers.v[0xA] = 60;
    		chip8.registers.v[0xB] = 28;
-   		chip8.registers.index = 0x400;
+   		chip8.registers.i = 0x400;
 
    		for y in 0x400..0x408 {
    			chip8.memory.ram[y] = 0xFF;
@@ -1204,10 +1193,10 @@ mod tests {
     	let mut chip8 = Chip8::new_and_init();   		
    		chip8.memory.ram[chip8.registers.pc as usize] = 0xFD;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x1E;
-   		chip8.registers.index = 500;
+   		chip8.registers.i = 500;
    		chip8.registers.v[0xD] = 60;   		
    		chip8.execute_next_opcode();   	
-		assert_eq!(560, chip8.registers.index);
+		assert_eq!(560, chip8.registers.i);
     }
 
     #[test]
@@ -1218,14 +1207,14 @@ mod tests {
    		chip8.registers.v[0xE] = 0;
    		chip8.execute_next_opcode();  
    		// Character zero is at 0x50 	
-		assert_eq!(0x50, chip8.registers.index);
+		assert_eq!(0x50, chip8.registers.i);
 
 		chip8.memory.ram[chip8.registers.pc as usize] = 0xFE;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x29;   		
    		chip8.registers.v[0xE] = 1;
    		chip8.execute_next_opcode();  
    		// Character one is at 0x55
-		assert_eq!(0x55, chip8.registers.index);
+		assert_eq!(0x55, chip8.registers.i);
     }
 
     #[test]
@@ -1234,7 +1223,7 @@ mod tests {
    		chip8.memory.ram[chip8.registers.pc as usize] = 0xFF;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x33;
    		chip8.registers.v[0xF] = 123;
-   		chip8.registers.index = 1000;
+   		chip8.registers.i = 1000;
    		chip8.execute_next_opcode();   	
 		assert_eq!(1, chip8.memory.ram[1000]);
 		assert_eq!(2, chip8.memory.ram[1001]);
@@ -1249,7 +1238,7 @@ mod tests {
    		for i in 0..16 {
    			chip8.registers.v[i] = (i + 1) as u8;
    		}
-   		chip8.registers.index = 1000;
+   		chip8.registers.i = 1000;
 		chip8.execute_next_opcode();
 
 		assert_eq!(1, chip8.memory.ram[1000]);
@@ -1267,7 +1256,7 @@ mod tests {
    		for i in 0..16 {
    			chip8.memory.ram[1000 + i] = (i + 1) as u8;
    		}
-   		chip8.registers.index = 1000;
+   		chip8.registers.i = 1000;
 		chip8.execute_next_opcode();
 
 		assert_eq!(1, chip8.registers.v[0]);

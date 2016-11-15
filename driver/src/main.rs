@@ -3,19 +3,17 @@ extern crate sdl2;
 
 use std::env;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 
 use chip8_emu::Chip8;
 
-use sdl2::{Sdl};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::Renderer;
 
 fn main() {
-	let mut buffer = [0u8; 1536];
+	let mut buffer = [0u8; 3584];
     let args: Vec<_> = env::args().collect();
     if args.len() < 2 {
     	println!("Usage: chip8_emu_driver rom");
@@ -107,14 +105,14 @@ fn main() {
 			renderer.clear();
 			let emu_screen = chip8.get_screen_ref();
 			for y in 0..32 {
-				for x in 0..63 {
+				for x in 0..64 {
 					let is_active_cell = emu_screen[y][x];
 					if is_active_cell {
 						renderer.set_draw_color(Color::RGB(255, 255, 224));
 					} else {
 						renderer.set_draw_color(Color::RGB(0, 0, 0));
 					}
-					let rect = Rect::new(x as i32 * 8, y as i32 * 8, 8, 8);
+					let rect = Rect::new(x as i32 * 10, y as i32 * 10, 10, 10);
 					renderer.fill_rect(rect).unwrap();
 				}
 			}

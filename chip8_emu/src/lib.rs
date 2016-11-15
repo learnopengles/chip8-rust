@@ -237,13 +237,51 @@ impl Chip8 {
 			},
 			0x3000...0x3FFF => {
 				// Skip next instruction if register Vx is equal to last two bytes.
-				let reg = opcode_register_index(opcode);
+				let reg = opcode_register_index_second_octet(opcode);
 				let operand = opcode_operand(opcode);
 				if self.registers.v[reg] == operand {
 					self.registers.pc += 4;
 				} else {
 					self.registers.pc += 2;
 				}
+			},
+			0x4000...0x4FFF => {
+				// Skip next instruction if register Vx is NOT equal to last two bytes.
+				let reg = opcode_register_index_second_octet(opcode);
+				let operand = opcode_operand(opcode);
+				if self.registers.v[reg] != operand {
+					self.registers.pc += 4;
+				} else {
+					self.registers.pc += 2;
+				}
+			},
+			0x5000...0x5FFF => {
+				// 0x5xy0
+				// Skip next instruction if registers Vx and Vy are equal.
+				// The last octet should be zero but we won't fail on that here.				
+				let reg_x = opcode_register_index_second_octet(opcode);
+				let reg_y = opcode_register_index_third_octet(opcode);
+				
+				if self.registers.v[reg_x] == self.registers.v[reg_y] {
+					self.registers.pc += 4;
+				} else {
+					self.registers.pc += 2;
+				}
+			},
+			0x6000...0x6FFF => {				
+				// Store second byte in the specified register.
+				let reg = opcode_register_index_second_octet(opcode);
+				let operand = opcode_operand(opcode);
+				self.registers.v[reg] = operand;
+				self.registers.pc += 2;
+			},
+			0x7000...0x7FFF => {				
+				// Add operand to register.
+				let reg = opcode_register_index_second_octet(opcode);
+				let operand = opcode_operand(opcode);
+				self.registers.v[reg] = self.registers.v[reg].wrapping_add(operand);
+				// TODO where else do I need to do wrapping adds?
+				self.registers.pc += 2;
 			},
 			_ => {
 				// TODO unknown opcode
@@ -258,8 +296,13 @@ fn opcode_address(opcode: u16) -> u16 {
 }
 
 #[inline]
-fn opcode_register_index(opcode: u16) -> usize {
+fn opcode_register_index_second_octet(opcode: u16) -> usize {
 	((opcode & 0x0F00) >> 8) as usize
+}
+
+#[inline]
+fn opcode_register_index_third_octet(opcode: u16) -> usize {
+	((opcode & 0x00F0) >> 4) as usize
 }
 
 #[inline]
@@ -380,18 +423,9 @@ mod tests {
    		let next_opcode = chip8.memory.read_unsigned_short(chip8.registers.pc);
    		assert_eq!(0xAAAA, next_opcode);
     }      
-    #[test]
-    fn test_skip_instruction_doesnt_skip() {
-    	let mut chip8 = Chip8::new_and_init();
-    	chip8.memory.ram[chip8.registers.pc as usize] = 0x3A;
-   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
-   		// Doesn't match default mem value of 0x00, should only increment program counter by two.
-   		chip8.execute_next_opcode();
-   		assert_eq!(0x202, chip8.registers.pc);
-    }
 
     #[test]
-    fn test_skip_instruction_skips() {
+    fn test_skip_when_equal_instruction_skips() {
     	let mut chip8 = Chip8::new_and_init();
     	chip8.memory.ram[chip8.registers.pc as usize] = 0x3A;
    		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
@@ -399,5 +433,86 @@ mod tests {
    		chip8.registers.v[0xA] = 0xDD;
    		chip8.execute_next_opcode();
    		assert_eq!(0x204, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_skip_when_equal_instruction_doesnt_skip() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x3A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
+   		// Doesn't match default mem value of 0x00, should only increment program counter by two.
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x202, chip8.registers.pc);
+    }    
+
+    #[test]
+    fn test_skip_when_not_equal_instruction_skips() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x4A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
+   		// Doesn't match default mem value of 0x00, should increment program counter by four.
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x204, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_skip_when_not_equal_instruction_doesnt_skip() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x4A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xDD;	
+   		// If register V[A] == 0xDD, then we should NOT skip
+   		chip8.registers.v[0xA] = 0xDD;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x202, chip8.registers.pc);
+    }    
+
+    #[test]
+    fn test_skip_when_two_registers_equal_skips() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x5A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB0;	
+   		chip8.registers.v[0xA] = 0xBB;
+   		chip8.registers.v[0xB] = 0xBB;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x204, chip8.registers.pc);
     }  
+    #[test]
+    fn test_skip_when_two_registers_not_equal_doesnt_skip() {
+    	let mut chip8 = Chip8::new_and_init();
+    	chip8.memory.ram[chip8.registers.pc as usize] = 0x5A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xB0;	
+   		chip8.registers.v[0xA] = 0xBB;
+   		chip8.registers.v[0xB] = 0xCC;
+   		chip8.execute_next_opcode();
+   		assert_eq!(0x202, chip8.registers.pc);
+    }
+
+    #[test]
+    fn test_store() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x62;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0xAB;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0xAB, chip8.registers.v[2]);
+    }
+
+    #[test]
+    fn test_add() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x7A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x0A;
+   		chip8.registers.v[0xA] = 0xA;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x14, chip8.registers.v[0xA]);
+    }
+
+    #[test]
+    fn test_add_wraps() {
+   		let mut chip8 = Chip8::new_and_init();
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0x7A;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x96;
+   		chip8.registers.v[0xA] = 0x80;
+   		chip8.execute_next_opcode();   		
+   		assert_eq!(0x16, chip8.registers.v[0xA]);
+    }
 }

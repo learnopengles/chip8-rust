@@ -451,9 +451,13 @@ impl<R: Rng> Chip8<R> {
 						self.timers.sound_timer = self.registers.v[reg_x];												
 					},
 					0x1E => {
-						// Increment index
-						let new_index = self.registers.i.wrapping_add(self.registers.v[reg_x] as u16);
-						self.registers.i = new_index;															
+						// Increment index			
+						let new_index: u32 = (self.registers.i + self.registers.v[reg_x] as u16) as u32;
+						// Undocumented feature, according to Wiki. Should wrap around 0xFFF.
+						let did_overflow = new_index > 0xFFF;
+						let new_index = (new_index & 0xFFF) as u16;
+						self.registers.i = new_index;						
+						self.registers.v[0xF] = if did_overflow { 1 } else { 0 };
 					},
 					0x29 => {
 						// Location of sprite
@@ -1195,6 +1199,19 @@ mod tests {
    		chip8.registers.v[0xD] = 60;   		
    		chip8.execute_next_opcode();   	
 		assert_eq!(560, chip8.registers.i);
+		assert_eq!(0, chip8.registers.v[0xF]);
+    }
+
+    #[test]
+    fn test_opcode_fx1e_add_to_index_with_overflow() {
+    	let mut chip8 = Chip8::new_and_init();   		
+   		chip8.memory.ram[chip8.registers.pc as usize] = 0xFD;
+   		chip8.memory.ram[(chip8.registers.pc + 1) as usize] = 0x1E;
+   		chip8.registers.i = 0xFFF;
+   		chip8.registers.v[0xD] = 2;   		
+   		chip8.execute_next_opcode();   	
+		assert_eq!(1, chip8.registers.i);
+		assert_eq!(1, chip8.registers.v[0xF]);
     }
 
     #[test]

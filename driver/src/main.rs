@@ -124,25 +124,25 @@ fn handle_events<R: Rng>(chip8: &mut Chip8<R>, event_pump: &mut EventPump) -> Ev
 }
 
 fn pass_key_to_emu<R: Rng>(chip8: &mut Chip8<R>, key: Keycode, is_pressed: bool) {
-	match key {
-		Keycode::Num1	 	=> chip8.set_key_state(0x1, is_pressed),
-		Keycode::Num2	 	=> chip8.set_key_state(0x2, is_pressed),
-		Keycode::Num3	 	=> chip8.set_key_state(0x3, is_pressed),
-		Keycode::Num4	 	=> chip8.set_key_state(0xC, is_pressed),
-		Keycode::Q 			=> chip8.set_key_state(0x4, is_pressed),
-		Keycode::W 			=> chip8.set_key_state(0x5, is_pressed),
-		Keycode::E 			=> chip8.set_key_state(0x6, is_pressed),
-		Keycode::R 			=> chip8.set_key_state(0xD, is_pressed),
-		Keycode::A 			=> chip8.set_key_state(0x7, is_pressed),
-		Keycode::S 			=> chip8.set_key_state(0x8, is_pressed),
-		Keycode::D 			=> chip8.set_key_state(0x9, is_pressed),
-		Keycode::F 			=> chip8.set_key_state(0xE, is_pressed),
-		Keycode::Z 			=> chip8.set_key_state(0xA, is_pressed),
-		Keycode::X 			=> chip8.set_key_state(0x0, is_pressed),
-		Keycode::C 			=> chip8.set_key_state(0xB, is_pressed),
-		Keycode::V 			=> chip8.set_key_state(0xF, is_pressed),
-		_					=> {},
-	}
+    match key {
+        Keycode::Num1       => chip8.set_key_state(0x1, is_pressed),
+        Keycode::Num2       => chip8.set_key_state(0x2, is_pressed),
+        Keycode::Num3       => chip8.set_key_state(0x3, is_pressed),
+        Keycode::Num4       => chip8.set_key_state(0xC, is_pressed),
+        Keycode::Q          => chip8.set_key_state(0x4, is_pressed),
+        Keycode::W          => chip8.set_key_state(0x5, is_pressed),
+        Keycode::E          => chip8.set_key_state(0x6, is_pressed),
+        Keycode::R          => chip8.set_key_state(0xD, is_pressed),
+        Keycode::A          => chip8.set_key_state(0x7, is_pressed),
+        Keycode::S          => chip8.set_key_state(0x8, is_pressed),
+        Keycode::D          => chip8.set_key_state(0x9, is_pressed),
+        Keycode::F          => chip8.set_key_state(0xE, is_pressed),
+        Keycode::Z          => chip8.set_key_state(0xA, is_pressed),
+        Keycode::X          => chip8.set_key_state(0x0, is_pressed),
+        Keycode::C          => chip8.set_key_state(0xB, is_pressed),
+        Keycode::V          => chip8.set_key_state(0xF, is_pressed),
+        _                   => {},
+    }
 }
 
 // Note: The execution rate and timers are frame-rate dependent.

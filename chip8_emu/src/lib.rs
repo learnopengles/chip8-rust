@@ -218,7 +218,6 @@ impl<R: Rng> Chip8<R> {
 
 	pub fn execute_next_opcode(&mut self) {
 		let opcode = self.memory.read_unsigned_short(self.registers.pc);
-		println!("Executing opcode {0:x}, pc = {1}, index = {2}", opcode, self.registers.pc, self.registers.i);			
 		self.registers.pc += 2;		
 		match opcode {
 			0x00E0 => {
@@ -411,10 +410,10 @@ impl<R: Rng> Chip8<R> {
 				let second_byte = opcode_second_byte(opcode);
 				let reg_x = opcode_register_vx(opcode);
 				let v_x = self.registers.v[reg_x];
-				let key = self.input.keys[v_x as usize];
+				let key = self.input.keys[v_x as usize];				
 
 				if second_byte == 0x9E && key == true {
-					// Skip if key is pressed
+					// Skip if key is pressed					
 					self.registers.pc += 2;
 				} else if second_byte == 0xA1 && key == false {
 					// Skip if key is NOT pressed
@@ -436,7 +435,7 @@ impl<R: Rng> Chip8<R> {
 						// Check if key pressed; only continue execution if pressed.
 						self.registers.pc -= 2;
 						for (i, key) in self.input.keys.iter().enumerate() {
-							if *key == true {
+							if *key == true {								
 								self.registers.v[reg_x] = i as u8;
 								self.registers.pc += 2;
 								break;
@@ -477,14 +476,12 @@ impl<R: Rng> Chip8<R> {
 					0x55 => {
 						// Spill registers from 0 to x to memory, inclusive.
 						let index = self.registers.i as usize;												
-						self.memory.ram[index..index + reg_x + 1].copy_from_slice(&self.registers.v[0..reg_x + 1]);						
-						self.registers.i = self.registers.i.wrapping_add((reg_x + 1) as u16);									
+						self.memory.ram[index..index + reg_x + 1].copy_from_slice(&self.registers.v[0..reg_x + 1]);
 					},
 					0x65 => {
 						// Load memory into registers from 0 to x, inclusive.
 						let index = self.registers.i as usize;						
-						self.registers.v[0..reg_x + 1].copy_from_slice(&self.memory.ram[index..index + reg_x + 1]);												
-						self.registers.i = self.registers.i.wrapping_add((reg_x + 1) as u16);						
+						self.registers.v[0..reg_x + 1].copy_from_slice(&self.memory.ram[index..index + reg_x + 1]);															
 					}
 					_ => {
 						// Unknown opcode.						
@@ -1248,10 +1245,10 @@ mod tests {
 		assert_eq!(3, chip8.memory.ram[1002]);
 		assert_eq!(4, chip8.memory.ram[1003]);
 		assert_eq!(5, chip8.memory.ram[1004]);   		
-		assert_eq!(0, chip8.memory.ram[1005]);   	
+		assert_eq!(0, chip8.memory.ram[1005]);
 
-		// index register should be incremented by register count + 1
-		assert_eq!(1000 + 4 + 1, chip8.registers.i);	
+		// Index should NOT have changed.
+		assert_eq!(1000, chip8.registers.i);
     }
 
     #[test]
@@ -1273,7 +1270,7 @@ mod tests {
 		assert_eq!(5, chip8.registers.v[4]);		
 		assert_eq!(0, chip8.registers.v[5]);
 
-		// index register should be incremented by register count + 1
-		assert_eq!(1000 + 4 + 1, chip8.registers.i);	
+		// Index should NOT have changed.
+		assert_eq!(1000, chip8.registers.i);
     }
 }

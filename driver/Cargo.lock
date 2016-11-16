@@ -3,6 +3,7 @@ name = "chip8_emu_driver"
 version = "0.1.0"
 dependencies = [
  "chip8_emu 0.1.0",
+ "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "sdl2 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

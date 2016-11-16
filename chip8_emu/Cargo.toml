@@ -2,6 +2,11 @@
 name = "chip8_emu"
 version = "0.1.0"
 authors = ["Kevin Brothaler <contact@digipom.com>"]
+description = "CHIP-8 emulator"
+keywords = ["emu", "example", "chip8"]
+license = "Apache-2.0"
+homepage = "https://github.com/learnopengles/chip8-rust"
+repository = "https://github.com/learnopengles/chip8-rust"
 
 [dependencies]
 rand = "0.3.14"

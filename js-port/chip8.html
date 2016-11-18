@@ -1,0 +1,107 @@
+<html>	
+	<head>
+		<meta charset="utf-8">
+	</head>
+	<body>
+		<div align="center">
+			<p>
+				<canvas id="chip8_display" width="512" height="256">
+					This canvas is used as the visual output of the CHIP-8 emulator.
+				</canvas>
+			</p>
+			<p>
+				Select Rom:
+				<select id="chip8_rom_select">
+					<option>15PUZZLE</option>
+					<option>BLINKY</option>
+					<option>BLITZ</option>
+					<option>BRIX</option>
+					<option>CONNECT4</option>
+					<option>GUESS</option>
+					<option>HIDDEN</option>
+					<option>INVADERS</option>
+					<option>KALEID</option>
+					<option>MAZE</option>
+					<option>MERLIN</option>
+					<option>MISSILE</option>
+					<option>PONG</option>
+					<option>PONG2</option>
+					<option>PUZZLE</option>
+					<option>SYZYGY</option>
+					<option>TANK</option>
+					<option>TETRIS</option>
+					<option>TICTAC</option>
+					<option>UFO</option>
+					<option>VBRIX</option>
+					<option>VERS</option>
+					<option>WIPEOFF</option>
+				</select>
+				<button id="chip8_resume">Start</button>
+				<button id="chip8_pause">Pause</button>
+			</p>
+			<p>
+				Keys:
+			</p>
+			<p>
+				<table>
+					<tr>
+						<td style="text-align:center">1</td>
+						<td style="text-align:center">2</td>
+						<td style="text-align:center">3</td>
+						<td style="text-align:center">4</td>
+					</tr>
+					<tr>
+						<td style="text-align:center">Q</td>
+						<td style="text-align:center">W</td>
+						<td style="text-align:center">E</td>
+						<td style="text-align:center">R</td>
+					</tr>
+					<tr>
+						<td style="text-align:center">A</td>
+						<td style="text-align:center">S</td>
+						<td style="text-align:center">D</td>
+						<td style="text-align:center">F</td>
+					</tr>
+					<tr>
+						<td style="text-align:center">Z</td>
+						<td style="text-align:center">X</td>
+						<td style="text-align:center">C</td>
+						<td style="text-align:center">V</td>
+					</tr>
+				</table>
+			</p>
+			<p>
+				Touch keyboard:
+			</p>
+			<p>
+				<table cellpadding="16">
+					<tr>
+						<td style="text-align:center" id="chip8_key_one">1</td>
+						<td style="text-align:center" id="chip8_key_two">2</td>
+						<td style="text-align:center" id="chip8_key_three">3</td>
+						<td style="text-align:center" id="chip8_key_c">C</td>
+					</tr>
+					<tr>
+						<td style="text-align:center" id="chip8_key_four">4</td>
+						<td style="text-align:center" id="chip8_key_five">5</td>
+						<td style="text-align:center" id="chip8_key_six">6</td>
+						<td style="text-align:center" id="chip8_key_d">D</td>
+					</tr>
+					<tr>
+						<td style="text-align:center" id="chip8_key_seven">7</td>
+						<td style="text-align:center" id="chip8_key_eight">8</td>
+						<td style="text-align:center" id="chip8_key_nine">9</td>
+						<td style="text-align:center" id="chip8_key_e">E</td>
+					</tr>
+					<tr>
+						<td style="text-align:center" id="chip8_key_a">A</td>
+						<td style="text-align:center" id="chip8_key_zero">0</td>
+						<td style="text-align:center" id="chip8_key_b">B</td>
+						<td style="text-align:center" id="chip8_key_f">F</td>
+					</tr>
+				</table>
+			</p>
+		<div>
+		<script src="chip8.js"></script>
+	</body>
+</html>

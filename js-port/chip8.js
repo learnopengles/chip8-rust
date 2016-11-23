@@ -605,27 +605,31 @@ function forwardKeyPressToChip8(keyChar, isPressed) {
     }
 }
 
-function forwardTouchToChip8(id, isPressed) {
+function forwardTouchToChip8(event, id, isPressed) {
+    var forwarded = false;
     switch (id) {
-        case "chip8_key_zero"   : chip8.input.keys[0x0] = isPressed; break;
-        case "chip8_key_one"    : chip8.input.keys[0x1] = isPressed; break;
-        case "chip8_key_two"    : chip8.input.keys[0x2] = isPressed; break;
-        case "chip8_key_three"  : chip8.input.keys[0x3] = isPressed; break;
+        case "chip8_key_zero"   : chip8.input.keys[0x0] = isPressed; forwarded = true; break;
+        case "chip8_key_one"    : chip8.input.keys[0x1] = isPressed; forwarded = true; break;
+        case "chip8_key_two"    : chip8.input.keys[0x2] = isPressed; forwarded = true; break;
+        case "chip8_key_three"  : chip8.input.keys[0x3] = isPressed; forwarded = true; break;
 
-        case "chip8_key_four"   : chip8.input.keys[0x4] = isPressed; break;
-        case "chip8_key_five"   : chip8.input.keys[0x5] = isPressed; break;
-        case "chip8_key_six"    : chip8.input.keys[0x6] = isPressed; break;
-        case "chip8_key_seven"  : chip8.input.keys[0x7] = isPressed; break;
+        case "chip8_key_four"   : chip8.input.keys[0x4] = isPressed; forwarded = true; break;
+        case "chip8_key_five"   : chip8.input.keys[0x5] = isPressed; forwarded = true; break;
+        case "chip8_key_six"    : chip8.input.keys[0x6] = isPressed; forwarded = true; break;
+        case "chip8_key_seven"  : chip8.input.keys[0x7] = isPressed; forwarded = true; break;
 
-        case "chip8_key_eight"  : chip8.input.keys[0x8] = isPressed; break;
-        case "chip8_key_nine"   : chip8.input.keys[0x9] = isPressed; break;
-        case "chip8_key_a"      : chip8.input.keys[0xA] = isPressed; break;
-        case "chip8_key_b"      : chip8.input.keys[0xB] = isPressed; break;
+        case "chip8_key_eight"  : chip8.input.keys[0x8] = isPressed; forwarded = true; break;
+        case "chip8_key_nine"   : chip8.input.keys[0x9] = isPressed; forwarded = true; break;
+        case "chip8_key_a"      : chip8.input.keys[0xA] = isPressed; forwarded = true; break;
+        case "chip8_key_b"      : chip8.input.keys[0xB] = isPressed; forwarded = true; break;
 
-        case "chip8_key_c"      : chip8.input.keys[0xC] = isPressed; break;
-        case "chip8_key_d"      : chip8.input.keys[0xD] = isPressed; break;
-        case "chip8_key_e"      : chip8.input.keys[0xE] = isPressed; break;
-        case "chip8_key_f"      : chip8.input.keys[0xF] = isPressed; break;
+        case "chip8_key_c"      : chip8.input.keys[0xC] = isPressed; forwarded = true; break;
+        case "chip8_key_d"      : chip8.input.keys[0xD] = isPressed; forwarded = true; break;
+        case "chip8_key_e"      : chip8.input.keys[0xE] = isPressed; forwarded = true; break;
+        case "chip8_key_f"      : chip8.input.keys[0xF] = isPressed; forwarded = true; break;
+    }
+    if (forwarded) {
+        event.preventDefault();
     }
 }
 
@@ -643,7 +647,7 @@ function handleMouseEvent(event) {
 
 function handleTouchEvent(event) {    
     var isPressed = event.type == "touchstart" ? 1 : 0;
-    forwardTouchToChip8(event.target.id, isPressed);    
+    forwardTouchToChip8(event, event.target.id, isPressed);    
 }
 
 // Setup CHIP-8 callbacks
